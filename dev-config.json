@@ -1,0 +1,11 @@
+{
+  "apps": [
+    {
+      "name": "thanos",
+      "script": "npm run start",
+      "log_file": "~/.pm2/logs/thanos.log",
+      "combine_logs": true,
+      "log_date_format": "YYYY-MM-DD HH:mm:ss Z"
+    }
+  ]
+}

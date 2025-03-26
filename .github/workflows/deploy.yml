@@ -1,0 +1,50 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [dev]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "23"
+
+    - name: Install Dependencies
+      run: npm install
+
+    - name: Build Application
+      run: |
+        npm run build
+        cp package.json dev-config.json dist/
+
+    - name: Archive Production Artifacts
+      run: |
+        tar -czf thanos.tar.gz dist
+
+    - name: Copy Artifacts to Server
+      run: |
+        sshpass -p "${{ secrets.SERVER_PASSWORD }}" scp -o StrictHostKeyChecking=no thanos.tar.gz "${{ secrets.SERVER_USERNAME }}@${{ secrets.SERVER_HOST }}:/tmp/prudentbird"
+
+    - name: Deploy on Server
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USERNAME }}
+        password: ${{ secrets.SERVER_PASSWORD }}
+        script: |
+          cd ~/prudentbird/thanos
+          tar -xzf /tmp/prudentbird/thanos.tar.gz -C .
+          rm -f /tmp/prudentbird/thanos.tar.gz
+          mv dist/package.json .
+          mv dist/dev-config.json .
+          npm install
+          pm2 reload dev-config.json --update-env || pm2 start dev-config.json
