@@ -5,6 +5,7 @@ interface Config {
   SLACK_BOT_TOKEN: string;
   SLACK_APP_TOKEN: string;
   MENTORS_CHANNEL_ID: string;
+  GEMINI_API_KEY: string;
 }
 
 const requiredConfig = {
@@ -23,6 +24,10 @@ const requiredConfig = {
   MENTORS_CHANNEL_ID: {
     value: process.env.MENTORS_CHANNEL_ID,
     description: "Channel ID for mentor-specific operations",
+  },
+  GEMINI_API_KEY: {
+    value: process.env.GEMINI_API_KEY,
+    description: "API key for Gemini AI services",
   },
 };
 

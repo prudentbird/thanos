@@ -12,6 +12,7 @@
   "license": "MIT",
   "description": "A Slack bot built using the Slack Bolt framework for managing mentor-related operations.",
   "dependencies": {
+    "@google/genai": "^0.6.1",
     "@slack/bolt": "^4.2.1",
     "@slack/web-api": "^7.9.1",
     "dotenv": "^16.4.7",
