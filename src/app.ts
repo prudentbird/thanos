@@ -1,6 +1,7 @@
 import { App, LogLevel } from "@slack/bolt";
 import appConfig from "./config";
 import { getAllChannelMembers } from "./utils";
+import { model } from "./model";
 
 const app = new App({
   socketMode: true,
@@ -34,9 +35,16 @@ app.message(async ({ message, say, client, logger }) => {
     const botUserId = botInfo.user_id;
 
     if ("text" in message && message.text?.includes(`<@${botUserId}>`)) {
+      const userMessage = message.text.replace(`<@${botUserId}>`, "").trim();
+      const modelResponse = await model.chat(userMessage);
+
       await say({
-        text: "*Thanos is INEVITABLE* :warn: \n\nPrepare yourself for the snap! :thanos-gaunlet:",
+        text:
+          modelResponse.text ??
+          "Unable to provide a response. Please try again later!",
         thread_ts: message.ts,
+        as_user: true,
+        reply_broadcast: false,
       });
     }
   } catch (error) {
@@ -84,5 +92,7 @@ app.command("/dice", async ({ command, ack, say, client, logger }) => {
 
 (async () => {
   await app.start(appConfig.PORT || 3000);
-  console.log(`⚡️ Thanos is running in socket mode on port ${appConfig.PORT || 3000}!`);
+  console.log(
+    `⚡️ Thanos is running in socket mode on port ${appConfig.PORT || 3000}!`,
+  );
 })();
