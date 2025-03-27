@@ -1,6 +1,6 @@
 import { App, LogLevel } from "@slack/bolt";
 import appConfig from "./config";
-import { getAllChannelMembers } from "./utils";
+import { getAllChannelMembers, uploadDeportationLogsToGoogleSheets, getDeportationLogs } from "./utils";
 
 const app = new App({
   socketMode: true,
@@ -79,6 +79,156 @@ app.command("/dice", async ({ command, ack, say, client, logger }) => {
     );
   } catch (error) {
     logger.error("Error handling /dice command:", error);
+  }
+});
+app.command("/deport", async ({ command, ack, say, client, logger }) => {
+  try {
+    await ack();
+
+    const excludeChannelMembers = await getAllChannelMembers(
+      client,
+      appConfig.MENTORS_CHANNEL_ID,
+    );
+
+    if (!excludeChannelMembers.includes(command.user_id)) {
+      await say(
+        ":x: Unauthorized to perform this action. Only mentors can deport interns.",
+      );
+      return;
+    }
+
+    const targetUsers = command.text.trim();
+    if (!targetUsers) {
+      await say("Please specify users to deport (e.g. /deport @user1 @user2)");
+      return;
+    }
+
+    const userIds = targetUsers.match(/<@(\w+)>/g)?.map(user => user.replace(/[<@>]/g, '')) || [];
+
+    if (userIds.length === 0) {
+      await say("No valid users specified. Please use format: /deport @user1 @user2");
+      return;
+    }
+
+    const deportLogs = [];
+
+    for (const userId of userIds) {
+      const channels = await client.users.conversations({
+        user: userId,
+        types: 'public_channel,private_channel'
+      });
+      
+      const originalChannels = [];
+      
+      for (const channel of channels.channels || []) {
+        if (!channel.id) {
+          logger.warn(`Skipping channel without ID: ${channel.name}`);
+          continue;
+        }
+
+        try {
+          await client.conversations.kick({ channel: channel.id, user: userId });
+          originalChannels.push(channel.id);
+        } catch (error) {
+          logger.warn(`Could not remove user from channel ${channel.name}:`, error);
+        }
+      }
+      
+      await client.conversations.invite({
+        channel: appConfig.MEXICO_CHANNEL_ID,
+        users: userId
+      });
+
+      deportLogs.push({
+        userId,
+        originalChannels,
+        deportedBy: command.user_id,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    try {
+      await uploadDeportationLogsToGoogleSheets(deportLogs);
+    } catch (error) {
+      logger.error("Error logging to Google Sheets:", error);
+    }
+
+    const userMentions = userIds.map(id => `<@${id}>`).join(' ');
+    await client.chat.postMessage({
+      channel: appConfig.MEXICO_CHANNEL_ID,
+      text: `${userMentions} has been deported to Mexico by <@${command.user_id}>`
+    });
+  } catch (error) {
+    logger.error("Error handling /deport command:", error);
+  }
+});
+
+app.command("/reinstate", async ({ command, ack, say, client, logger }) => {
+  try {
+    await ack();
+
+    const excludeChannelMembers = await getAllChannelMembers(
+      client,
+      appConfig.MENTORS_CHANNEL_ID,
+    );
+
+    if (!excludeChannelMembers.includes(command.user_id)) {
+      await say(
+        ":x: Unauthorized to perform this action. Only mentors can reinstate users.",
+      );
+      return;
+    }
+
+    const targetUsers = command.text.trim();
+    if (!targetUsers) {
+      await say("Please specify users to reinstate (e.g. /reinstate @user1 @user2)");
+      return;
+    }
+
+    const userIds = targetUsers.match(/<@(\w+)>/g)?.map(user => user.replace(/[<@>]/g, '')) || [];
+
+    if (userIds.length === 0) {
+      await say("No valid users specified. Please use format: /reinstate @user1 @user2");
+      return;
+    }
+
+    const deportationLogs = await getDeportationLogs(userIds);
+
+    for (const userId of userIds) {
+      const userLogs = deportationLogs.filter(log => log.userId === userId);
+      
+      if (userLogs.length === 0) {
+        await say(`No deportation record found for <@${userId}>`);
+        continue;
+      }
+
+      for (const log of userLogs) {
+        for (const channelId of log.originalChannels) {
+          try {
+            await client.conversations.invite({
+              channel: channelId,
+              users: userId
+            });
+          } catch (error) {
+            logger.warn(`Could not add user to channel ${channelId}:`, error);
+          }
+        }
+      }
+
+      try {
+        await client.conversations.kick({
+          channel: appConfig.MEXICO_CHANNEL_ID,
+          user: userId
+        });
+      } catch (error) {
+        logger.warn(`Could not remove user from Mexico channel:`, error);
+      }
+    }
+
+    const userMentions = userIds.map(id => `<@${id}>`).join(' ');
+    await say(`${userMentions} have been reinstated by <@${command.user_id}>`);
+  } catch (error) {
+    logger.error("Error handling /reinstate command:", error);
   }
 });
 
